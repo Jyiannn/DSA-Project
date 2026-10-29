@@ -1,0 +1,14 @@
+# Dependencies and generated output
+node_modules/
+dist/
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+
+# Tooling and operating-system files
+.vite/
+*.log
+.DS_Store
+Thumbs.db
