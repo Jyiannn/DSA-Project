@@ -10,7 +10,7 @@ function validate(values) {
   return errors;
 }
 
-export default function SignupPage({ entering }) {
+export default function SignupPage({ entering, onSuccess }) {
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
@@ -28,7 +28,7 @@ export default function SignupPage({ entering }) {
     const nextErrors = validate(values);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length === 0) {
-      setNotice('This demo validates the form locally; connect it to your authentication service to sign in.');
+      onSuccess?.();
     }
   };
 
