@@ -11,7 +11,7 @@ function ResourceState({ error, onRetry, label }) {
   return <div className="resource-state"><i /><span>Loading {label}...</span></div>;
 }
 
-export default function OverviewPage({ onNavigate }) {
+export default function OverviewPage({ onNavigate, onLogout }) {
   const { data, loading, error, reload } = useAsyncResource(getDashboardOverview, []);
   const [spaces, setSpaces] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
@@ -36,7 +36,7 @@ export default function OverviewPage({ onNavigate }) {
   const visibleActivity = showAll ? recentActivity : recentActivity.slice(0, 3);
 
   return (
-    <DashboardShell page="overview" onNavigate={onNavigate}>
+    <DashboardShell page="overview" onNavigate={onNavigate} onLogout={onLogout}>
       <div className="prototype-page overview-prototype">
         <header className="page-title"><div><p>OPERATIONS CENTER</p><h1>Parking Overview</h1></div><button onClick={() => onNavigate('/parking-spaces')}>Manage spaces <span>&rarr;</span></button></header>
         {loading && !data ? <ResourceState label="dashboard" /> : error ? <ResourceState error={error} label="dashboard" onRetry={reload} /> : <>

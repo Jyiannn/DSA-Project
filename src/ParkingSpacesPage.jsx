@@ -10,7 +10,7 @@ function ResourceState({ error, onRetry }) {
   return <div className="resource-state"><i /><span>Loading parking spaces...</span></div>;
 }
 
-export default function ParkingSpacesPage({ onNavigate }) {
+export default function ParkingSpacesPage({ onNavigate, onLogout }) {
   const { data, loading, error, reload } = useAsyncResource(getParkingSpacesPageData, []);
   const [spaces, setSpaces] = useState([]);
   const [records, setRecords] = useState([]);
@@ -51,7 +51,7 @@ export default function ParkingSpacesPage({ onNavigate }) {
   const clearFilters = () => { setQuery(''); setClassification('All classifications'); setZone('All records'); setSortOrder('Newest'); };
 
   return (
-    <DashboardShell page="parking-spaces" onNavigate={onNavigate}>
+    <DashboardShell page="parking-spaces" onNavigate={onNavigate} onLogout={onLogout}>
       <div className="prototype-page parking-prototype">
         <header className="page-title"><div><p>SPACE MANAGEMENT</p><h1>Parking Spaces</h1></div><button onClick={() => onNavigate('/overview')}>Back to overview <span>&larr;</span></button></header>
         {loading && !data ? <ResourceState /> : error ? <ResourceState error={error} onRetry={reload} /> : <>

@@ -1,7 +1,7 @@
 import useAsyncResource from './hooks/useAsyncResource';
 import { getCurrentUser } from './services/userService';
 
-export default function DashboardShell({ page, onNavigate, children }) {
+export default function DashboardShell({ page, onNavigate, onLogout, children }) {
   const { data: user, loading } = useAsyncResource(getCurrentUser, []);
   return (
     <div className="prototype-shell">
@@ -17,7 +17,7 @@ export default function DashboardShell({ page, onNavigate, children }) {
         <div className="prototype-operator" aria-busy={loading}>
           <b>{user?.initials || '...'}</b>
           <span>{user?.fullName || 'Loading user'}<small>{user?.role || 'Loading profile'}</small></span>
-          <i aria-hidden="true">⌃</i>
+          <button className="logout-button" type="button" onClick={onLogout} title="Sign out">Sign out</button>
         </div>
       </aside>
       <main className="prototype-workspace">{children}</main>

@@ -1,6 +1,6 @@
-import { currentUser } from '../data/userData';
+import { getDemoSession } from './authService';
 import { mockResponse } from './api';
 
 export async function getCurrentUser() {
-  return mockResponse(currentUser);
+  return mockResponse(getDemoSession()?.user || null);
 }
