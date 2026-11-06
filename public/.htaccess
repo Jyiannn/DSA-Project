@@ -1,0 +1,22 @@
+RewriteEngine On
+
+# PHP API handles its own routing in api/.htaccess.
+RewriteRule ^api/ - [L]
+
+# Client-side routes (/overview, /parking-spaces) reload straight into index.html.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . index.html [L]
+
+# Compress text responses (needs mod_deflate + mod_filter in httpd.conf).
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain text/javascript application/javascript application/json image/svg+xml
+</IfModule>
+
+# Build files carry a content hash, so they never change; the HTML shell must revalidate.
+<FilesMatch "^index-.*\.(js|css)$">
+  Header set Cache-Control "public, max-age=31536000, immutable"
+</FilesMatch>
+<FilesMatch "\.html$">
+  Header set Cache-Control "no-cache"
+</FilesMatch>

@@ -1,7 +1,7 @@
-import { mockResponse } from './api';
+import { request } from './api';
 
-const REMEMBERED_SESSION_KEY = 'parkganern.demo.session';
-const TAB_SESSION_KEY = 'parkganern.demo.tab-session';
+const SESSION_KEY = 'parkganern.session';
+const TAB_SESSION_KEY = 'parkganern.tab-session';
 
 function storageFor(kind) {
   try {
@@ -31,53 +31,44 @@ function writeJson(storage, key, value) {
   }
 }
 
-function createUser(username) {
-  const cleanUsername = username.trim();
-  const displayName = cleanUsername.includes('@') ? cleanUsername.split('@')[0] : cleanUsername;
-  return {
-    id: `demo-user-${cleanUsername.toLowerCase()}`,
-    username: cleanUsername,
-    fullName: displayName,
-    initials: displayName.split(/[.\s_-]+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'PG',
-    role: 'Demo parking manager',
-    email: cleanUsername.includes('@') ? cleanUsername : '',
-  };
-}
-
-export function getDemoSession() {
-  return readJson(storageFor('local'), REMEMBERED_SESSION_KEY, null)
+export function getSession() {
+  return readJson(storageFor('local'), SESSION_KEY, null)
     || readJson(storageFor('session'), TAB_SESSION_KEY, null);
 }
 
-// Frontend-only temporary login. Replace this function with a PHP authentication request later.
-export async function startDemoSession({ username, password, remember }) {
-  if (!username?.trim()) throw new Error('Enter your username or email address.');
-  if (!password || password.length < 6) throw new Error('Password must contain at least 6 characters.');
+export async function startSession({ username, password, remember }) {
+  const payload = await request('auth/login', {
+    method: 'POST',
+    body: { username, password, remember },
+  });
 
   const session = {
-    user: createUser(username),
-    startedAt: new Date().toISOString(),
+    user: payload.user,
+    startedAt: payload.startedAt,
     remember: Boolean(remember),
   };
   const storage = storageFor(remember ? 'local' : 'session');
-  const key = remember ? REMEMBERED_SESSION_KEY : TAB_SESSION_KEY;
+  const key = remember ? SESSION_KEY : TAB_SESSION_KEY;
   if (!writeJson(storage, key, session)) {
     throw new Error('Browser storage is unavailable. Enable storage to start a session.');
   }
   try {
     if (remember) storageFor('session')?.removeItem(TAB_SESSION_KEY);
-    else storageFor('local')?.removeItem(REMEMBERED_SESSION_KEY);
+    else storageFor('local')?.removeItem(SESSION_KEY);
   } catch {
-    // There is no remote session; stale local session cleanup is non-critical.
+    // Stale local session cleanup is non-critical.
   }
-  return mockResponse(session);
+  return session;
 }
 
-export function logoutDemoAccount() {
+export function logout() {
   try {
-    storageFor('local')?.removeItem(REMEMBERED_SESSION_KEY);
+    storageFor('local')?.removeItem(SESSION_KEY);
     storageFor('session')?.removeItem(TAB_SESSION_KEY);
   } catch {
-    // Storage may be disabled by the browser. There is no remote session to revoke.
+    // Storage may be disabled by the browser.
   }
+  request('auth/logout', { method: 'POST' }).catch(() => {
+    // The local session is already cleared; the server cookie expires on its own.
+  });
 }

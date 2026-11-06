@@ -1,0 +1,10 @@
+RewriteEngine On
+
+# Schema dumps are not public.
+<FilesMatch "\.sql$">
+  Require all denied
+</FilesMatch>
+
+# Everything under /api goes to the PHP front controller.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [QSA,L]

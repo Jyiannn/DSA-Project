@@ -1,8 +1,22 @@
-// Frontend-only mock helpers. Replace individual service implementations with PHP REST calls later.
-export const MOCK_REQUEST_DELAY = 180;
+const API_BASE = `${import.meta.env.BASE_URL}api`;
 
-export function mockResponse(value, delay = MOCK_REQUEST_DELAY) {
-  // JSON cloning keeps this mock layer compatible with browsers that do not support structuredClone.
-  const copy = JSON.parse(JSON.stringify(value));
-  return new Promise((resolve) => window.setTimeout(() => resolve(copy), delay));
+// PHP API client. Every request shares the parkganern session cookie.
+export async function request(path, { method = 'GET', body } = {}) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/${path}`, {
+      method,
+      credentials: 'same-origin',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new Error('Cannot reach the server. Check that Apache and MySQL are running.');
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error || 'The server could not complete the request.');
+  }
+  return payload;
 }

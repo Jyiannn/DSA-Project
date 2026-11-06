@@ -1,6 +1,5 @@
-import { parkingHistory } from '../data/parkingHistoryData';
-import { mockResponse } from './api';
+import { request } from './api';
 
-export async function getParkingHistory() {
-  return mockResponse(parkingHistory);
+export function getParkingHistory() {
+  return request('parking-history');
 }

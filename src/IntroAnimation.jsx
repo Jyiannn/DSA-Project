@@ -21,9 +21,9 @@ export default function IntroAnimation({ onStageChange }) {
     <section className={`intro intro--${phase}`} aria-label="Parkganern introduction">
       <div className="intro__roadway" aria-hidden="true">
         <span className="intro__road" />
-        <img className="intro__car" src="/assets/car.png" alt="" />
+        <img className="intro__car" src="assets/car.png" alt="" />
       </div>
-      <img className="intro__seal" src="/assets/university-seal.png" alt="" />
+      <img className="intro__seal" src="assets/university-seal.png" alt="" />
     </section>
   );
 }

@@ -1,11 +1,5 @@
-import { dashboardOverview } from '../data/dashboardData';
-import { parkingRecords, parkingSpaces } from '../data/parkingData';
-import { mockResponse } from './api';
+import { request } from './api';
 
-export async function getDashboardOverview() {
-  return mockResponse({
-    ...dashboardOverview,
-    spaces: parkingSpaces,
-    recentActivity: parkingRecords,
-  });
+export function getDashboardOverview(date) {
+  return request('dashboard' + (date ? '?date=' + encodeURIComponent(date) : ''));
 }

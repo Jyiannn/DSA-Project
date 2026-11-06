@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import NoticeModal from './NoticeModal';
 
 const classifications = [
   ['Student', 'Student ID required'],
@@ -6,28 +7,36 @@ const classifications = [
   ['Visitor', 'Walk-in visitor'],
 ];
 
-export default function ParkingRegistrationForm({ selectedSpace, onUseAuto, onRegistered }) {
+export default function ParkingRegistrationForm({ onRegistered }) {
   const [classification, setClassification] = useState('Student');
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmation, setConfirmation] = useState(null); // { owner, plate }
 
   const submit = async (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
     setSubmitting(true);
     setNotice('');
     try {
-      const record = await onRegistered?.({
-        motorcycleType: form.get('motorcycleType'),
-        plate: form.get('plate'),
-        ownerName: form.get('ownerName'),
+      const clean = (key) => String(form.get(key) ?? '').trim().replace(/\s+/g, ' ');
+      // One string keeps the bike visible everywhere: "Underbone · Honda Click 125 - Silver".
+      const model = `${clean('motorcycleType')} · ${clean('brand')} ${clean('bikeModel')} - ${clean('color')}`;
+      const owner = clean('ownerName');
+      const plate = clean('plate');
+      await onRegistered?.({
+        motorcycleType: model,
+        plate,
+        ownerName: owner,
         classification,
-        studentId: form.get('studentId'),
-        slot: selectedSpace || 'A4',
+        studentId: clean('studentId'),
+        contact: clean('contact'),
       });
-      setNotice(record ? `Temporary session record created for ${record.slot}. It is not saved to a database.` : 'Parking record could not be prepared.');
-    } catch {
-      setNotice('The temporary record could not be prepared. Please try again.');
+      setConfirmation({ owner, plate });
+      formEl.reset();
+    } catch (registerError) {
+      setNotice(registerError instanceof Error ? registerError.message : 'The motorist could not be registered. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -35,16 +44,16 @@ export default function ParkingRegistrationForm({ selectedSpace, onUseAuto, onRe
 
   return (
     <form className="motorcycle-form" onSubmit={submit}>
-      <div className="form-kicker">NEW RECORD <em>&bull; LIVE</em></div>
-      <h2>Park a motorcycle</h2>
+      <div className="form-kicker">NEW RECORD</div>
+      <h2>New Motorist</h2>
 
-      <label>Motorcycle type *
-        <select name="motorcycleType" defaultValue="" required>
-          <option value="" disabled>Select scooter, underbone, or sport bike</option>
-          <option>Scooter</option><option>Underbone</option><option>Sport bike</option>
-        </select>
-      </label>
-      <label>Motorcycle license plate *<input name="plate" required placeholder="ABC-1234" /></label>
+      <div className="form-grid">
+        <label>Motorcycle type *<input name="motorcycleType" required maxLength={20} placeholder="e.g. Scooter" /></label>
+        <label>Motorcycle brand *<input name="brand" required maxLength={25} placeholder="e.g. Honda" /></label>
+        <label>Motorcycle color *<input name="color" required maxLength={15} placeholder="e.g. Silver" /></label>
+        <label>Motorcycle model *<input name="bikeModel" required maxLength={40} placeholder="e.g. Click 125" /></label>
+        <label>License plate *<input name="plate" required maxLength={20} placeholder="ABC-1234" /></label>
+      </div>
       <label>Owner name *<input name="ownerName" required placeholder="Full name" /></label>
 
       <fieldset>
@@ -59,13 +68,11 @@ export default function ParkingRegistrationForm({ selectedSpace, onUseAuto, onRe
       </fieldset>
 
       <label>{classification === 'Student' ? 'Student ID' : `${classification} ID`} *<input name="studentId" placeholder="2024-01234" /></label>
-      <div className="auto-slot">
-        <i aria-hidden="true">P</i>
-        <span><small>SLOT ASSIGNMENT</small><b>Auto - nearest open slot</b><em>Next: {selectedSpace || 'A4'} in row A</em></span>
-        <button type="button" onClick={onUseAuto}>Use auto</button>
-      </div>
-      <button className="park-action" type="submit" disabled={submitting}>{submitting ? 'Preparing record...' : 'Park motorcycle'} <span aria-hidden="true">&rarr;</span></button>
-      {notice && <p className="park-notice" role="status">{notice}</p>}
+      <label>Owner contact *<input name="contact" type="tel" required placeholder="0917 000 0000" /></label>
+
+      <button className="park-action" type="submit" disabled={submitting}>{submitting ? 'Registering...' : 'Register motorist'} <span aria-hidden="true">&rarr;</span></button>
+      {notice && <p className="park-notice park-notice--error" role="alert">{notice}</p>}
+      {confirmation && <NoticeModal title="Registration complete" message={`New motorist is now registered — ${confirmation.plate} (${confirmation.owner}).`} onClose={() => setConfirmation(null)} />}
     </form>
   );
 }
