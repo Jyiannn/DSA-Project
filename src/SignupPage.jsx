@@ -47,7 +47,7 @@ export default function SignupPage({ entering, onSuccess }) {
       <aside className="brand-panel">
         <img className="brand-panel__seal" src="assets/university-seal.png" alt="University of Dagupan seal" />
         <div className="brand-panel__content"><h1><span>PARK</span><span>GANERN</span></h1><p>A smart parking system that helps manage parking spaces and monitor vehicle entry and exit on campus.</p></div>
-        <div className="brand-panel__credits"><span>Developed By</span><span>Jherome Pontawe</span><span>Adrian Tenepere</span><span>Liam Laki Oten</span></div>
+        <div className="brand-panel__credits"><span>Developed By</span><span>Ryan Justine Faulve</span><span>Jherome Pontawe</span><span>Adrian Tenepere</span><span>Jeann Liam Racuya</span></div>
       </aside>
       <div className="signin-page__content">
         <form className="signin-card" noValidate onSubmit={submit}>

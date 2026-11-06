@@ -28,10 +28,16 @@ try {
             records();
         case 'POST registered-motorists':
             register_motorist();
+        case 'POST registered-motorists/update':
+            update_motorist();
+        case 'POST registered-motorists/delete':
+            delete_motorist();
         case 'POST parking-records':
             create_record();
         case 'POST parking-records/vacate':
             vacate();
+        case 'POST parking-spaces/reserve':
+            reserve();
         case 'POST parking-records/revisit':
             revisit();
         case 'GET parking-history':
@@ -337,6 +343,147 @@ function vacate(): never
     $stmt = $pdo->prepare('SELECT * FROM parking_records WHERE id = ?');
     $stmt->execute([$record['id']]);
     respond(record_payload($stmt->fetch()));
+}
+
+function reserve(): never
+{
+    require_auth();
+    $body = json_input();
+    $slot = strtoupper(trim((string) ($body['slot'] ?? '')));
+    $reserve = filter_var($body['reserve'] ?? null, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+
+    if (!preg_match('/^[A-Z]\d{1,3}$/', $slot)) {
+        fail(422, 'Choose a valid parking slot.');
+    }
+    if ($reserve === null) {
+        fail(422, 'Say whether to reserve or release the slot.');
+    }
+
+    $target = $reserve ? 'reserved' : 'available';
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare('SELECT status FROM parking_spaces WHERE id = ? FOR UPDATE');
+        $stmt->execute([$slot]);
+        $space = $stmt->fetch();
+
+        if (!$space) {
+            $pdo->rollBack();
+            fail(404, 'That parking slot does not exist.');
+        }
+        // Reserving an occupied slot would strand the parked motorcycle.
+        if ($reserve && $space['status'] !== 'available') {
+            $pdo->rollBack();
+            fail(409, $space['status'] === 'reserved' ? 'That slot is already reserved.' : 'That slot is occupied.');
+        }
+        if (!$reserve && $space['status'] !== 'reserved') {
+            $pdo->rollBack();
+            fail(409, 'That slot is not reserved.');
+        }
+
+        $pdo->prepare('UPDATE parking_spaces SET status = ? WHERE id = ?')->execute([$target, $slot]);
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
+    }
+
+    respond(['id' => $slot, 'status' => $target]);
+}
+
+function delete_motorist(): never
+{
+    require_auth();
+    $body = json_input();
+
+    $id = (int) preg_replace('/\D/', '', (string) ($body['id'] ?? ''));
+    if ($id <= 0) {
+        fail(422, 'Choose a saved motorist.');
+    }
+
+    // Past parking visits keep their denormalized snapshot; only the saved profile goes.
+    $stmt = db()->prepare('DELETE FROM registered_motorists WHERE id = ?');
+    $stmt->execute([$id]);
+    if ($stmt->rowCount() === 0) {
+        fail(404, 'That motorist no longer exists.');
+    }
+
+    respond(['ok' => true]);
+}
+
+function update_motorist(): never
+{
+    require_auth();
+    $body = json_input();
+
+    $id = (int) preg_replace('/\D/', '', (string) ($body['id'] ?? ''));
+    $plate = strtoupper(trim((string) ($body['plate'] ?? '')));
+    $owner = trim((string) ($body['owner'] ?? ''));
+    $model = trim((string) ($body['model'] ?? ''));
+    $classification = (string) ($body['classification'] ?? '');
+    $studentId = trim((string) ($body['studentId'] ?? ''));
+    $contact = trim((string) ($body['contact'] ?? ''));
+
+    if ($id <= 0) {
+        fail(422, 'Choose a saved motorist.');
+    }
+    if ($plate === '' || mb_strlen($plate) > 20) {
+        fail(422, 'Enter a valid license plate.');
+    }
+    if ($owner === '' || mb_strlen($owner) > 150) {
+        fail(422, 'Enter the owner name.');
+    }
+    if ($model === '' || mb_strlen($model) > 100) {
+        fail(422, 'Describe the motorcycle.');
+    }
+    if ($contact === '' || mb_strlen($contact) > 40) {
+        fail(422, 'Enter a valid contact number.');
+    }
+    if (!in_array($classification, ['Student', 'School Staff', 'Visitor'], true)) {
+        fail(422, 'Choose a valid classification.');
+    }
+    if (mb_strlen($studentId) > 40) {
+        fail(422, 'That ID number is too long.');
+    }
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $current = $pdo->prepare('SELECT plate FROM registered_motorists WHERE id = ? FOR UPDATE');
+        $current->execute([$id]);
+        $oldPlate = $current->fetchColumn();
+        if ($oldPlate === false) {
+            $pdo->rollBack();
+            fail(404, 'That motorist no longer exists.');
+        }
+
+        $existing = $pdo->prepare('SELECT owner FROM registered_motorists WHERE plate = ? AND id <> ?');
+        $existing->execute([$plate, $id]);
+        $ownerRegistered = $existing->fetchColumn();
+        if ($ownerRegistered) {
+            $pdo->rollBack();
+            fail(409, "That plate is already registered to $ownerRegistered.");
+        }
+
+        $pdo->prepare('UPDATE registered_motorists SET plate = ?, model = ?, owner = ?, contact = ?, classification = ?, student_id = ? WHERE id = ?')
+            ->execute([$plate, $model, $owner, $contact, $classification, $studentId ?: null, $id]);
+
+        // Same motorcycle, new plate: keep visit history attached to it.
+        if (strcasecmp($oldPlate, $plate) !== 0) {
+            $pdo->prepare('UPDATE parking_records SET plate = ? WHERE plate = ?')->execute([$plate, $oldPlate]);
+        }
+
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
+    }
+
+    respond(['ok' => true, 'id' => 'motorist-' . $id]);
 }
 
 function register_motorist(): never

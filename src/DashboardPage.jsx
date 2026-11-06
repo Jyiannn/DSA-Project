@@ -6,7 +6,7 @@ import RegisteredMotoristForm from './RegisteredMotoristForm';
 import useAsyncResource from './hooks/useAsyncResource';
 import LiveClock from './LiveClock';
 import { getDashboardOverview } from './services/dashboardService';
-import { registerMotorist, logRevisit, vacateParkingSpace } from './services/parkingService';
+import { registerMotorist, logRevisit, vacateParkingSpace, reserveSpace } from './services/parkingService';
 
 function ResourceState({ error, onRetry, label }) {
   if (error) return <div className="resource-state resource-state--error"><b>Unable to load {label}.</b><span>{error}</span><button onClick={onRetry}>Try again</button></div>;
@@ -47,6 +47,19 @@ export default function DashboardPage({ onNavigate, onLogout }) {
     }
   };
 
+  const setReserved = async (slot, reserve) => {
+    try {
+      const result = await reserveSpace(slot, reserve);
+      setSpaces((current) => current.map((space) => space.id === slot ? { ...space, status: result.status } : space));
+      // A reserved slot can no longer be the auto-picked space.
+      setSelectedSpace((current) => (current === slot && reserve ? '' : current));
+      setBoardNotice(reserve ? `Slot ${slot} reserved.` : `Slot ${slot} reservation released.`);
+      reload(); // Keep the Reserved statistic in sync.
+    } catch (reserveError) {
+      setBoardNotice(reserveError instanceof Error ? reserveError.message : 'The slot could not be reserved.');
+    }
+  };
+
   const logRepeat = async (plate, slot) => {
     const record = await logRevisit(plate, slot);
     setRecentActivity((current) => [record, ...current]);
@@ -67,7 +80,7 @@ export default function DashboardPage({ onNavigate, onLogout }) {
             {data.statistics.map((statistic) => <article key={statistic.id} className={statistic.tone === 'success' ? 'available' : ''}><span>{statistic.label}</span><b>{statistic.value}</b><small>{statistic.detail}</small></article>)}
           </section>
           <section className="overview-board" aria-label="Motorcycle parking board">
-            <article className="parking-board"><header><div><span>Motorcycle parking</span><small>Choose an available space</small></div><i><b />Live occupancy</i></header>{boardNotice && <p className="board-notice">{boardNotice}</p>}<div className="motorcycle-grid">{spaces.map((space) => <MotorcycleSlot key={space.id} space={space} occupant={(data.occupants || []).find((record) => record.slot === space.id)} selected={selectedSpace === space.id} onSelect={setSelectedSpace} onVacate={vacateSpace} />)}</div><footer><span><i /> Available</span><span><i /> Occupied</span></footer></article>
+            <article className="parking-board"><header><div><span>Motorcycle parking</span><small>Choose an available space</small></div><i><b />Live occupancy</i></header>{boardNotice && <p className="board-notice">{boardNotice}</p>}<div className="motorcycle-grid">{spaces.map((space) => <MotorcycleSlot key={space.id} space={space} occupant={(data.occupants || []).find((record) => record.slot === space.id)} selected={selectedSpace === space.id} onSelect={setSelectedSpace} onVacate={vacateSpace} onReserve={setReserved} />)}</div><footer><span><i /> Available</span><span><i /> Occupied</span><span className="is-reserved-key"><i /> Reserved</span></footer></article>
             <div className="form-stack">
               <RegisteredMotoristForm motorists={data.motorists || []} spaces={spaces} selectedSpace={selectedSpace} onSlotChange={setSelectedSpace} onPark={logRepeat} />
               <ParkingRegistrationForm onRegistered={registerNew} />
