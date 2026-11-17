@@ -1,5 +1,6 @@
 import useAsyncResource from './hooks/useAsyncResource';
 import { getCurrentUser } from './services/userService';
+import DsaOverlay from './DsaOverlay';
 
 export default function DashboardShell({ page, onNavigate, onLogout, children }) {
   const { data: user, loading } = useAsyncResource(getCurrentUser, []);
@@ -21,6 +22,7 @@ export default function DashboardShell({ page, onNavigate, onLogout, children })
         </nav>
       </aside>
       <main className="prototype-workspace">{children}</main>
+      <DsaOverlay />
     </div>
   );
 }
