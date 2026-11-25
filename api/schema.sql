@@ -6,6 +6,7 @@
 CREATE DATABASE IF NOT EXISTS parkganern_parking CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE parkganern_parking;
 
+-- Old databases may still have this table; drop it before parking_records because of the FK.
 DROP TABLE IF EXISTS parking_history;
 DROP TABLE IF EXISTS parking_records;
 DROP TABLE IF EXISTS registered_motorists;
@@ -58,14 +59,6 @@ CREATE TABLE registered_motorists (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE = InnoDB;
 
-CREATE TABLE parking_history (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  record_id INT UNSIGNED NOT NULL,
-  event VARCHAR(60) NOT NULL,
-  occurred_at DATETIME NOT NULL,
-  CONSTRAINT fk_history_record FOREIGN KEY (record_id) REFERENCES parking_records (id) ON DELETE CASCADE
-) ENGINE = InnoDB;
-
 -- Both demo accounts use the password: password123
 INSERT INTO users (username, email, full_name, role, password_hash) VALUES
   ('demo', 'demo@dagupan.edu.ph', 'Demo Manager', 'Parking manager', '$2y$10$9ZXy1Jd0q4Sz6vd7eW/y9u.UNr8zHm8l6GyYXtvUQOeabFE7.c322'),
@@ -99,9 +92,6 @@ INSERT INTO parking_records (plate, model, slot, driver, contact, classification
   ('8PQR56', 'Yamaha Mio - Pink', 'C1', 'Kyla Ramos', '0917 345 6789', 'Student', '2024-02788', DATE_ADD(CURDATE(), INTERVAL 510 MINUTE)),
   ('3STU78', 'Honda ADV 160 - Gray', 'C3', 'Dante Cruz', '0917 567 8901', 'School Staff', 'FAC-2022', DATE_ADD(CURDATE(), INTERVAL 515 MINUTE)),
   ('2VWX90', 'Kawasaki Rouser - Green', 'C5', 'Carlo Reyes', '0917 789 0123', 'Visitor', NULL, DATE_ADD(CURDATE(), INTERVAL 520 MINUTE));
-
-INSERT INTO parking_history (record_id, event, occurred_at)
-SELECT id, 'Vehicle entered', entered_at FROM parking_records;
 
 -- Registered motorists: everyone who has a saved profile (seed entries cover the demo bikes).
 INSERT INTO registered_motorists (plate, model, owner, contact, classification, student_id) VALUES

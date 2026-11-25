@@ -61,13 +61,17 @@ export async function startSession({ username, password, remember }) {
   return session;
 }
 
-export function logout() {
+export function clearSession() {
   try {
     storageFor('local')?.removeItem(SESSION_KEY);
     storageFor('session')?.removeItem(TAB_SESSION_KEY);
   } catch {
     // Storage may be disabled by the browser.
   }
+}
+
+export function logout() {
+  clearSession();
   request('auth/logout', { method: 'POST' }).catch(() => {
     // The local session is already cleared; the server cookie expires on its own.
   });

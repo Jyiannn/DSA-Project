@@ -1,6 +1,9 @@
 # Dependencies and generated output
 node_modules/
 dist/
+/assets/
+/index.html
+/.htaccess
 
 # Environment files and local secrets
 .env

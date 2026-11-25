@@ -22,6 +22,8 @@ export default function App() {
   const [stage, setStage] = useState(() => getSession() ? 'signin' : 'intro');
   const [path, setPath] = useState(getPathname);
   const [session, setSession] = useState(getSession);
+  const [dsaMode, setDsaMode] = useState(false);
+  const toggleDsa = () => setDsaMode((value) => !value);
 
   useEffect(() => {
     const syncPath = () => setPath(getPathname());
@@ -60,8 +62,8 @@ export default function App() {
     return <main className="app-shell"><SignupPage entering={false} onSuccess={beginSession} /></main>;
   }
 
-  if (path === '/dashboard') return <DashboardPage onNavigate={navigate} onLogout={endSession} />;
-  if (path === '/records') return <RecordsPage onNavigate={navigate} onLogout={endSession} />;
+  if (path === '/dashboard') return <DashboardPage onNavigate={navigate} onLogout={endSession} dsaMode={dsaMode} onToggleDsa={toggleDsa} />;
+  if (path === '/records') return <RecordsPage onNavigate={navigate} onLogout={endSession} dsaMode={dsaMode} onToggleDsa={toggleDsa} />;
 
   return (
     <main className="app-shell">

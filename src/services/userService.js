@@ -1,5 +1,5 @@
 import { request } from './api';
-import { getSession } from './authService';
+import { clearSession, getSession } from './authService';
 
 // The sidebar remounts on every navigation; keep the profile for the current session.
 let cached = null;
@@ -11,7 +11,12 @@ export async function getCurrentUser() {
     const { user } = await request('users/me');
     cached = user;
     return user;
-  } catch {
+  } catch (error) {
+    if (error?.status === 401) {
+      cached = null;
+      clearSession();
+      return null;
+    }
     // The sidebar still renders from the stored session while the API is unreachable.
     return sessionUser;
   }

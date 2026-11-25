@@ -29,15 +29,9 @@ if ($aligned -ne '1') {
     if ($import.ExitCode -ne 0) { throw 'Schema import failed.' }
 }
 
-if (-not (Test-Path node_modules)) { npm install }
-# Vite builds from index.html, which this script overwrites with the production HTML.
-Copy-Item index.dev.html index.html -Force
+if (-not (Test-Path node_modules)) { npm ci }
+# postbuild installs the production shell and assets into this Apache doc root.
 npm run build
 if ($LASTEXITCODE -ne 0) { throw 'Vite build failed.' }
-
-# Copy in place: this folder is both the source and Apache's doc root.
-Remove-Item assets -Recurse -Force -ErrorAction SilentlyContinue
-Copy-Item dist\index.html index.html -Force
-Copy-Item dist\assets assets -Recurse -Force
 
 Write-Host 'Ready -> http://localhost/DSA-Project/  (demo / password123)'

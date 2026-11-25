@@ -4,15 +4,19 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node -e \"require('fs').copyFileSync('index.dev.html','index.html')\"",
     "dev": "vite",
+    "prebuild": "node -e \"require('fs').copyFileSync('index.dev.html','index.html')\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "postbuild": "node scripts/install-build.mjs",
+    "preview": "vite preview",
+    "test": "node --test src/*.test.js"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "react": "latest",
-    "react-dom": "latest"
+    "@vitejs/plugin-react": "6.1.2",
+    "vite": "8.3.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {}
 }

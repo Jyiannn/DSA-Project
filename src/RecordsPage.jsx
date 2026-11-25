@@ -3,6 +3,7 @@ import DashboardShell from './DashboardShell';
 import useAsyncResource from './hooks/useAsyncResource';
 import CalendarPanel from './CalendarPanel';
 import { getRecordsPageData, updateMotorist, deleteMotorist } from './services/parkingService';
+import { hashBucket, sortedActivity } from './dsaAlgorithms';
 import EditMotoristModal from './EditMotoristModal';
 import RemoveMotoristModal from './RemoveMotoristModal';
 
@@ -13,7 +14,7 @@ function ResourceState({ error, onRetry }) {
 
 const matchesQuery = (values, query) => values.filter(Boolean).join(' ').toLowerCase().includes(query);
 
-export default function RecordsPage({ onNavigate, onLogout }) {
+export default function RecordsPage({ onNavigate, onLogout, dsaMode, onToggleDsa }) {
   const { data, loading, error, reload } = useAsyncResource(getRecordsPageData, []);
   const [motorists, setMotorists] = useState([]);
   const [records, setRecords] = useState([]);
@@ -64,12 +65,20 @@ export default function RecordsPage({ onNavigate, onLogout }) {
     if (historySort === 'time-desc') return timeOfDay(b).localeCompare(timeOfDay(a)) || a.driver.localeCompare(b.driver);
     return 0;
   });
+  const { sorted, mid } = sortedActivity(shownRecords);
+  const filterMarks = [
+    { label: 'Date', active: Boolean(filterDate) },
+    { label: 'Slot', active: slotFilter !== 'All' },
+    { label: 'Time', active: Boolean(timeFrom || timeTo) },
+    { label: 'Search', active: Boolean(normalizedHistoryQuery) },
+    { label: `Sort ${historySort}`, active: true },
+  ];
   const historyFiltered = Boolean(filterDate || normalizedHistoryQuery || slotFilter !== 'All' || timeFrom || timeTo);
   const clearHistoryFilters = () => { setFilterDate(''); setHistoryQuery(''); setHistorySort('newest'); setSlotFilter('All'); setTimeFrom(''); setTimeTo(''); };
   const formatDate = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
 
   return (
-    <DashboardShell page="records" onNavigate={onNavigate} onLogout={onLogout}>
+    <DashboardShell page="records" onNavigate={onNavigate} onLogout={onLogout} dsaMode={dsaMode} onToggleDsa={onToggleDsa}>
       <div className="prototype-page">
         <header className="page-title"><div><p>RECORD DESK</p><h1>Records</h1></div></header>
         {loading && !data ? <ResourceState /> : error ? <ResourceState error={error} onRetry={reload} /> : <>
@@ -78,17 +87,20 @@ export default function RecordsPage({ onNavigate, onLogout }) {
             <div className="records-controls records-controls--records"><label className="record-search">Search<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Motorcycle, name, ID/contact, classification..." />{query && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => setQuery('')}>&times;</button>}</label><label>Owner<select value={ownerOrder} onChange={(event) => setOwnerOrder(event.target.value)}><option value="default">Default (Record ID)</option><option value="asc">Ascending</option><option value="desc">Descending</option></select></label><label>Classification<select value={classFilter} onChange={(event) => setClassFilter(event.target.value)}><option value="All">All</option><option>Student</option><option>School Staff</option><option>Visitor</option></select></label></div>
             <div className="records-table records-table--motorists">
               <div className="records-labels"><span>Record ID</span><span>Motorcycle</span><span>Owner</span><span>Student ID</span><span>Contact</span><span>Classification</span><span>Actions</span></div>
-              {shownMotorists.length ? shownMotorists.map((motorist) => (
+              {shownMotorists.length ? shownMotorists.map((motorist) => {
+                const bucket = hashBucket(motorist.plate, motorists.length || 15);
+                return (
                 <div className="record-row" key={motorist.plate}>
                   <span className="record-id">#{Number(String(motorist.id || '').replace(/\D/g, '')) || 0}</span>
-                  <span className="record-bike"><i>MC</i><b>{motorist.plate}<small>{motorist.model}</small></b></span>
+                  <span className="record-bike"><i>MC</i><b>{motorist.plate}<small>{motorist.model}</small></b>{dsaMode && <em className="dsa-hash-chip" style={{ backgroundColor: `hsl(${(bucket * 37) % 360} 60% 92%)` }}>#{bucket}<i className="dsa-hash-chip__track"><b style={{ width: `${((bucket + 1) / (motorists.length || 15)) * 100}%` }} /></i></em>}</span>
                   <span>{motorist.owner}</span>
                   <span>{motorist.studentId || 'Not provided'}</span>
                   <span>{motorist.contact || 'Not provided'}</span>
                   <span>{motorist.classification}</span>
                   <span className="row-actions"><button type="button" className="row-action" onClick={() => setEditing(motorist)} aria-label={`Edit ${motorist.owner} (${motorist.plate})`}>Edit</button><button type="button" className="row-action row-action--danger" onClick={() => setRemoving(motorist)} aria-label={`Remove ${motorist.owner} (${motorist.plate})`}>Remove</button></span>
                 </div>
-              )) : <p className="empty-records">No saved motorcycles match that search.</p>}
+                );
+              }) : <p className="empty-records">No saved motorcycles match that search.</p>}
             </div>
           </section>
           <section className="records-panel" aria-label="Logged parking visits">
@@ -98,7 +110,18 @@ export default function RecordsPage({ onNavigate, onLogout }) {
             {historyFiltered && <p className="board-notice" role="status">Showing {shownRecords.length} visit{shownRecords.length === 1 ? '' : 's'} on the selected filter. <button className="inline-clear" type="button" onClick={clearHistoryFilters}>Clear filters</button></p>}
             <div className="records-table records-table--history">
               <div className="records-labels"><span>Date</span><span>Motorcycle</span><span>Name</span><span>Slot</span><span>Time in</span><span>Time out</span></div>
-              {shownRecords.length ? shownRecords.map((record) => <div className="record-row" key={record.id}><span className="record-date">{formatDate(record.enteredAt)}</span><span className="record-bike"><i>MC</i><b>{record.plate}<small>{record.model}</small></b></span><span>{record.driver}</span><span>{record.slot}</span><span>{record.timeIn}</span><span>{record.timeOut || '—'}</span></div>) : <p className="empty-records">{historyFiltered ? 'No visits match that filter.' : 'No visits logged yet.'}</p>}
+              {dsaMode && <div className="dsa-filter-map">{filterMarks.map((mark) => <span key={mark.label} className={mark.active ? 'is-active' : ''}>{mark.label}</span>)}</div>}
+              {shownRecords.length ? shownRecords.map((record) => {
+                const bucket = hashBucket(record.plate, records.length || 15);
+                const rank = sorted.indexOf(record);
+                return (
+                <div className="record-row" key={record.id}>
+                  <span className="record-date">{formatDate(record.enteredAt)}{dsaMode && <i className={`dsa-rank-bar${rank === mid && mid > 0 ? ' is-mid' : ''}`} style={{ height: `${8 + rank * 3}px` }} />}</span>
+                  <span className="record-bike"><i>MC</i><b>{record.plate}<small>{record.model}</small></b>{dsaMode && <em className="dsa-hash-chip" style={{ backgroundColor: `hsl(${(bucket * 37) % 360} 60% 92%)` }}>#{bucket}<i className="dsa-hash-chip__track"><b style={{ width: `${((bucket + 1) / (records.length || 15)) * 100}%` }} /></i></em>}</span>
+                  <span>{record.driver}</span><span>{record.slot}</span><span>{record.timeIn}</span><span>{record.timeOut || '—'}</span>
+                </div>
+                );
+              }) : <p className="empty-records">{historyFiltered ? 'No visits match that filter.' : 'No visits logged yet.'}</p>}
             </div>
           </section>
         </>}

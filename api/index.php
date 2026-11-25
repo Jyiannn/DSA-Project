@@ -32,16 +32,12 @@ try {
             update_motorist();
         case 'POST registered-motorists/delete':
             delete_motorist();
-        case 'POST parking-records':
-            create_record();
         case 'POST parking-records/vacate':
             vacate();
         case 'POST parking-spaces/reserve':
             reserve();
         case 'POST parking-records/revisit':
             revisit();
-        case 'GET parking-history':
-            parking_history();
         default:
             fail(404, 'Endpoint not found.');
     }
@@ -108,7 +104,7 @@ function logout(): never
 function records(): never
 {
     require_auth();
-    [, $records] = board();
+    $records = db()->query('SELECT * FROM parking_records ORDER BY entered_at DESC')->fetchAll();
 
     respond([
         'motorists' => saved_motorists(),
@@ -170,18 +166,7 @@ function dashboard(): never
         $counts[$space['status']]++;
     }
 
-    // ?date=YYYY-MM-DD narrows the activity feed to that day; everything else is unchanged.
-    $date = trim((string) ($_GET['date'] ?? ''));
-    if ($date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-        fail(422, 'Date must be YYYY-MM-DD.');
-    }
-    if ($date !== '') {
-        $stmt = db()->prepare('SELECT * FROM parking_records WHERE entered_at LIKE ? ORDER BY entered_at DESC');
-        $stmt->execute([$date . '%']);
-        $activity = $stmt->fetchAll();
-    } else {
-        $activity = array_slice($records, 0, 20);
-    }
+    $activity = array_slice($records, 0, 20);
 
     respond([
         'statistics' => [
@@ -216,92 +201,8 @@ function insert_record(PDO $pdo, array $data, string $slot): int
     $recordId = (int) $pdo->lastInsertId();
 
     $pdo->prepare("UPDATE parking_spaces SET status = 'occupied' WHERE id = ?")->execute([$slot]);
-    $pdo->prepare('INSERT INTO parking_history (record_id, event, occurred_at) VALUES (?, ?, ?)')
-        ->execute([$recordId, 'Vehicle entered', $enteredAt]);
 
     return $recordId;
-}
-
-function create_record(): never
-{
-    require_auth();
-    $body = json_input();
-
-    $plate = strtoupper(trim((string) ($body['plate'] ?? '')));
-    $owner = trim((string) ($body['ownerName'] ?? ''));
-    $model = trim((string) ($body['motorcycleType'] ?? ''));
-    // An empty slot means "auto park" — the server picks the nearest available space.
-    $slot = strtoupper(trim((string) ($body['slot'] ?? '')));
-    $classification = (string) ($body['classification'] ?? '');
-    $studentId = trim((string) ($body['studentId'] ?? ''));
-    $contact = trim((string) ($body['contact'] ?? ''));
-
-    if ($plate === '' || mb_strlen($plate) > 20) {
-        fail(422, 'Enter a valid license plate.');
-    }
-    if ($owner === '' || mb_strlen($owner) > 150) {
-        fail(422, 'Enter the owner name.');
-    }
-    if ($model === '' || mb_strlen($model) > 100) {
-        fail(422, 'Describe the motorcycle.');
-    }
-    if ($contact === '' || mb_strlen($contact) > 40) {
-        fail(422, 'Enter a valid contact number.');
-    }
-    if (!in_array($classification, ['Student', 'School Staff', 'Visitor'], true)) {
-        fail(422, 'Choose a valid classification.');
-    }
-    if ($slot !== '' && !preg_match('/^[A-Z]\d{1,3}$/', $slot)) {
-        fail(422, 'Choose a valid parking slot.');
-    }
-    if (mb_strlen($studentId) > 40) {
-        fail(422, 'That ID number is too long.');
-    }
-
-    $pdo = db();
-    $pdo->beginTransaction();
-    try {
-        if ($slot === '') {
-            $slot = $pdo->query("SELECT id FROM parking_spaces WHERE status = 'available' ORDER BY id LIMIT 1 FOR UPDATE")->fetchColumn();
-            if (!$slot) {
-                $pdo->rollBack();
-                fail(409, 'All parking spaces are occupied.');
-            }
-        } else {
-            $stmt = $pdo->prepare('SELECT status FROM parking_spaces WHERE id = ? FOR UPDATE');
-            $stmt->execute([$slot]);
-            $space = $stmt->fetch();
-
-            if (!$space) {
-                $pdo->rollBack();
-                fail(404, 'That parking slot does not exist.');
-            }
-            if ($space['status'] !== 'available') {
-                $pdo->rollBack();
-                fail(409, 'That parking slot is already occupied.');
-            }
-        }
-
-        $recordId = insert_record($pdo, [
-            'plate' => $plate,
-            'model' => $model,
-            'driver' => $owner,
-            'contact' => $contact,
-            'classification' => $classification,
-            'student_id' => $studentId,
-        ], $slot);
-
-        $pdo->commit();
-    } catch (Throwable $error) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        throw $error;
-    }
-
-    $stmt = $pdo->prepare('SELECT * FROM parking_records WHERE id = ?');
-    $stmt->execute([$recordId]);
-    respond(record_payload($stmt->fetch()), 201);
 }
 
 function vacate(): never
@@ -329,8 +230,6 @@ function vacate(): never
         $exitedAt = date('Y-m-d H:i:s');
         $pdo->prepare('UPDATE parking_records SET exited_at = ? WHERE id = ?')->execute([$exitedAt, $record['id']]);
         $pdo->prepare("UPDATE parking_spaces SET status = 'available' WHERE id = ?")->execute([$slot]);
-        $pdo->prepare('INSERT INTO parking_history (record_id, event, occurred_at) VALUES (?, ?, ?)')
-            ->execute([$record['id'], 'Vehicle exited', $exitedAt]);
 
         $pdo->commit();
     } catch (Throwable $error) {
@@ -517,15 +416,17 @@ function register_motorist(): never
         fail(422, 'That ID number is too long.');
     }
 
-    $existing = db()->prepare('SELECT owner FROM registered_motorists WHERE plate = ?');
-    $existing->execute([$plate]);
-    $ownerRegistered = $existing->fetchColumn();
-    if ($ownerRegistered) {
-        fail(409, "That plate is already registered to $ownerRegistered.");
+    try {
+        db()->prepare('INSERT INTO registered_motorists (plate, model, owner, contact, classification, student_id) VALUES (?, ?, ?, ?, ?, ?)')
+            ->execute([$plate, $model, $owner, $contact, $classification, $studentId ?: null]);
+    } catch (PDOException $error) {
+        if ($error->getCode() !== '23000') {
+            throw $error;
+        }
+        $existing = db()->prepare('SELECT owner FROM registered_motorists WHERE plate = ?');
+        $existing->execute([$plate]);
+        fail(409, 'That plate is already registered to ' . $existing->fetchColumn() . '.');
     }
-
-    db()->prepare('INSERT INTO registered_motorists (plate, model, owner, contact, classification, student_id) VALUES (?, ?, ?, ?, ?, ?)')
-        ->execute([$plate, $model, $owner, $contact, $classification, $studentId ?: null]);
 
     respond(['ok' => true, 'plate' => $plate], 201);
 }
@@ -607,19 +508,4 @@ function revisit(): never
     $stmt = $pdo->prepare('SELECT * FROM parking_records WHERE id = ?');
     $stmt->execute([$recordId]);
     respond(record_payload($stmt->fetch()), 201);
-}
-
-function parking_history(): never
-{
-    require_auth();
-    $rows = db()->query(
-        'SELECT id, record_id, event, occurred_at FROM parking_history ORDER BY occurred_at DESC, id DESC LIMIT 50'
-    )->fetchAll();
-
-    respond(array_map(static fn (array $row): array => [
-        'id' => 'history-' . $row['id'],
-        'event' => $row['event'],
-        'recordId' => 'record-' . $row['record_id'],
-        'occurredAt' => date('c', strtotime($row['occurred_at'])),
-    ], $rows));
 }

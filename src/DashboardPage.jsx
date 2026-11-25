@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import DashboardShell from './DashboardShell';
 import MotorcycleSlot from './MotorcycleSlot';
+import { buildGraph } from './graphLayout';
+import { hashBucket, heapLinks, sortedActivity } from './dsaAlgorithms';
 import ParkingRegistrationForm from './ParkingRegistrationForm';
 import RegisteredMotoristForm from './RegisteredMotoristForm';
 import useAsyncResource from './hooks/useAsyncResource';
@@ -13,13 +15,34 @@ function ResourceState({ error, onRetry, label }) {
   return <div className="resource-state"><i /><span>Loading {label}...</span></div>;
 }
 
-export default function DashboardPage({ onNavigate, onLogout }) {
+export default function DashboardPage({ onNavigate, onLogout, dsaMode, onToggleDsa }) {
   const { data, loading, error, reload } = useAsyncResource(() => getDashboardOverview(), []);
   const [spaces, setSpaces] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
   const [selectedSpace, setSelectedSpace] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [boardNotice, setBoardNotice] = useState('');
+  const gridRef = useRef(null);
+  const [geometry, setGeometry] = useState({ width: 0, height: 0, centres: [] });
+
+  // Measure the actual node circles so the edge lines land on them at any width.
+  useLayoutEffect(() => {
+    if (!dsaMode || !gridRef.current) return;
+    const measure = () => {
+      const grid = gridRef.current;
+      const box = grid.getBoundingClientRect();
+      const centres = [...grid.querySelectorAll('.motorcycle-slot-wrap')].map((wrap) => {
+        const node = wrap.querySelector('.graph-node') || wrap;
+        const rect = node.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2 - box.left, y: rect.top + rect.height / 2 - box.top };
+      });
+      setGeometry({ width: box.width, height: box.height, centres });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(gridRef.current);
+    return () => observer.disconnect();
+  }, [dsaMode, spaces]);
 
   useEffect(() => {
     if (!data) return;
@@ -70,9 +93,13 @@ export default function DashboardPage({ onNavigate, onLogout }) {
     return record;
   };
 
+  const availableIds = spaces.filter((space) => space.status === 'available').map((space) => space.id);
+  const links = heapLinks(availableIds);
   const visibleActivity = showAll ? recentActivity : recentActivity.slice(0, 3);
+  const { sorted, mid } = sortedActivity(visibleActivity);
+  const centreOf = (id) => geometry.centres[spaces.findIndex((space) => space.id === id)];
   return (
-    <DashboardShell page="dashboard" onNavigate={onNavigate} onLogout={onLogout}>
+    <DashboardShell page="dashboard" onNavigate={onNavigate} onLogout={onLogout} dsaMode={dsaMode} onToggleDsa={onToggleDsa}>
       <div className="prototype-page overview-prototype">
         <header className="page-title"><div><p>OPERATIONS CENTER</p><div className="title-row"><h1>Parking Dashboard</h1><LiveClock /></div></div></header>
         {loading && !data ? <ResourceState label="dashboard" /> : error ? <ResourceState error={error} label="dashboard" onRetry={reload} /> : <>
@@ -80,13 +107,57 @@ export default function DashboardPage({ onNavigate, onLogout }) {
             {data.statistics.map((statistic) => <article key={statistic.id} className={statistic.tone === 'success' ? 'available' : ''}><span>{statistic.label}</span><b>{statistic.value}</b><small>{statistic.detail}</small></article>)}
           </section>
           <section className="overview-board" aria-label="Motorcycle parking board">
-            <article className="parking-board"><header><div><span>Motorcycle parking</span><small>Choose an available space</small></div><i><b />Live occupancy</i></header>{boardNotice && <p className="board-notice">{boardNotice}</p>}<div className="motorcycle-grid">{spaces.map((space) => <MotorcycleSlot key={space.id} space={space} occupant={(data.occupants || []).find((record) => record.slot === space.id)} selected={selectedSpace === space.id} onSelect={setSelectedSpace} onVacate={vacateSpace} onReserve={setReserved} />)}</div><footer><span><i /> Available</span><span><i /> Occupied</span><span className="is-reserved-key"><i /> Reserved</span></footer></article>
+            <article className="parking-board"><header><div><span>Motorcycle parking</span><small>Choose an available space</small></div><i><b />Live occupancy</i></header>{boardNotice && <p className="board-notice">{boardNotice}</p>}
+              <div ref={gridRef} className={`motorcycle-grid${dsaMode ? ' is-graph' : ''}`}>
+                {dsaMode && geometry.centres.length === spaces.length && spaces.length > 0 && (
+                  <svg className="board-edges" viewBox={`0 0 ${geometry.width} ${geometry.height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                    {buildGraph(spaces).edges.map((edge) => {
+                      const from = geometry.centres[spaces.findIndex((space) => space.id === edge.from)];
+                      const to = geometry.centres[spaces.findIndex((space) => space.id === edge.to)];
+                      if (!from || !to) return null;
+                      return (
+                        <line
+                          key={`${edge.from}-${edge.to}`}
+                          className={edge.from === selectedSpace || edge.to === selectedSpace ? 'is-active' : ''}
+                          x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      );
+                    })}
+                  </svg>
+                )}
+                {dsaMode && geometry.centres.length === spaces.length && spaces.length > 0 && (
+                  <svg className="board-edges board-edges--heap" viewBox={`0 0 ${geometry.width} ${geometry.height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                    {links.map(({ parent, child }) => {
+                      const from = centreOf(parent);
+                      const to = centreOf(child);
+                      if (!from || !to) return null;
+                      return <line key={`${parent}-${child}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} vectorEffect="non-scaling-stroke" />;
+                    })}
+                  </svg>
+                )}
+                {spaces.map((space) => {
+                  const occupant = (data.occupants || []).find((record) => record.slot === space.id);
+                  return <MotorcycleSlot key={space.id} space={space} occupant={occupant} selected={selectedSpace === space.id} onSelect={setSelectedSpace} onVacate={vacateSpace} onReserve={setReserved} graphNode={dsaMode} bucket={occupant ? hashBucket(occupant.plate, spaces.length || 15) : null} rank={availableIds.indexOf(space.id) + 1 || null} root={availableIds[0] === space.id} />;
+                })}
+              </div>
+              {dsaMode && availableIds.length > 0 && (
+                <div className="dsa-heap-order" aria-hidden="true">
+                  {availableIds.map((id, index) => (
+                    <span key={id}>
+                      {index > 0 && <i>→</i>}
+                      <b className={index === 0 ? 'is-root' : ''}>{id}</b>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <footer><span><i /> Available</span><span><i /> Occupied</span><span className="is-reserved-key"><i /> Reserved</span></footer></article>
             <div className="form-stack">
               <RegisteredMotoristForm motorists={data.motorists || []} spaces={spaces} selectedSpace={selectedSpace} onSlotChange={setSelectedSpace} onPark={logRepeat} />
               <ParkingRegistrationForm onRegistered={registerNew} />
             </div>
           </section>
-          <section className="activity-panel"><header><div><p>LIVE LOG</p><h2>Recent Parking Activity</h2></div><button onClick={() => setShowAll((current) => !current)}>{showAll ? 'Show less' : 'View all activity'} <span>&rarr;</span></button></header><div className="activity-header"><span>Vehicle</span><span>Driver</span><span>Provided ID</span><span>Classification</span><span>Contact details</span><span>Time in</span><span>Time out</span></div>{visibleActivity.length ? visibleActivity.map((record) => <div className="prototype-activity" key={record.id}><span><i>MC</i><b>{record.plate}<small>{record.model}</small></b></span><span>{record.driver}</span><span>{record.studentId || 'Not provided'}</span><span>{record.classification || 'Not provided'}</span><span>{record.contact}</span><span>{record.timeIn}</span><span>{record.timeOut || '—'}</span></div>) : <p className="empty-records">No parking activity is available.</p>}</section>
+          <section className="activity-panel"><header><div><p>LIVE LOG</p><h2>Recent Parking Activity</h2></div><button onClick={() => setShowAll((current) => !current)}>{showAll ? 'Show less' : 'View all activity'} <span>&rarr;</span></button></header><div className="activity-header"><span>Vehicle</span><span>Driver</span><span>Provided ID</span><span>Classification</span><span>Contact details</span><span>Time in</span><span>Time out</span></div>{visibleActivity.length ? visibleActivity.map((record) => <div className="prototype-activity" key={record.id}><span>{dsaMode ? <i className={`dsa-sort-bar${sorted.indexOf(record) === mid && mid > 0 ? ' is-mid' : ''}`} style={{ height: `${8 + sorted.indexOf(record) * 3}px` }} /> : <i>MC</i>}<b>{record.plate}<small>{record.model}</small></b></span><span>{record.driver}</span><span>{record.studentId || 'Not provided'}</span><span>{record.classification || 'Not provided'}</span><span>{record.contact}</span><span>{record.timeIn}</span><span>{record.timeOut || '—'}</span></div>) : <p className="empty-records">No parking activity is available.</p>}</section>
         </>}
       </div>
     </DashboardShell>

@@ -17,7 +17,7 @@ function ActionIcon({ name }) {
   );
 }
 
-export default function MotorcycleSlot({ space, occupant, selected, onSelect, onVacate, onReserve }) {
+export default function MotorcycleSlot({ space, occupant, selected, onSelect, onVacate, onReserve, graphNode = false, bucket = null, rank = null, root = false }) {
   const available = space.status === 'available';
   const reserved = space.status === 'reserved';
   const occupied = space.status === 'occupied';
@@ -44,12 +44,16 @@ export default function MotorcycleSlot({ space, occupant, selected, onSelect, on
         aria-label={`${space.id}, ${STATUS[space.status].label}`}
       >
         <span className="slot-id">{space.id}</span>
-        <img
-          className="motorcycle-slot__icon"
-          src={occupied ? 'assets/occupied.png' : 'assets/available_space.png'}
-          alt=""
-          aria-hidden="true"
-        />
+        {graphNode
+          ? <span className={`graph-node is-${space.status}${root ? ' is-root' : ''}`} aria-hidden="true">
+              {bucket !== null ? <em className="graph-node__label">#{bucket}</em> : rank !== null ? <em className="graph-node__label">{rank}</em> : null}
+            </span>
+          : <img
+              className="motorcycle-slot__icon"
+              src={occupied ? 'assets/occupied.png' : 'assets/available_space.png'}
+              alt=""
+              aria-hidden="true"
+            />}
         <span className={`slot-status slot-status--${space.status}`}>{STATUS[space.status].label}</span>
         {occupied && occupant && <em className="slot-plate">{occupant.plate}</em>}
       </button>

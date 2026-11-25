@@ -1,9 +1,14 @@
+import { useEffect } from 'react';
 import useAsyncResource from './hooks/useAsyncResource';
 import { getCurrentUser } from './services/userService';
-import DsaOverlay from './DsaOverlay';
 
-export default function DashboardShell({ page, onNavigate, onLogout, children }) {
+export default function DashboardShell({ page, onNavigate, onLogout, dsaMode, onToggleDsa, children }) {
   const { data: user, loading } = useAsyncResource(getCurrentUser, []);
+
+  useEffect(() => {
+    if (!loading && user === null) onLogout?.();
+  }, [loading, user, onLogout]);
+
   return (
     <div className="prototype-shell">
       <aside className="prototype-sidebar">
@@ -21,8 +26,19 @@ export default function DashboardShell({ page, onNavigate, onLogout, children })
           <button className={page === 'records' ? 'is-active' : ''} onClick={() => onNavigate('/records')} aria-current={page === 'records' ? 'page' : undefined}>Records</button>
         </nav>
       </aside>
-      <main className="prototype-workspace">{children}</main>
-      <DsaOverlay />
+      <main className="prototype-workspace">
+        <button
+          type="button"
+          className="dsa-toggle"
+          onClick={onToggleDsa}
+          aria-pressed={dsaMode}
+          aria-label="Toggle DSA views of the parking board"
+          title="Toggle DSA views"
+        >
+          DSA
+        </button>
+        {children}
+      </main>
     </div>
   );
 }

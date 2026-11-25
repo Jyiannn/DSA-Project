@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-// XAMPP defaults. Change these before hosting anywhere else.
+// XAMPP defaults. Local demo only: root has no password and the demo logins are public.
 const DB_HOST = '127.0.0.1';
 const DB_NAME = 'parkganern_parking';
 const DB_USER = 'root';

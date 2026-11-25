@@ -16,7 +16,9 @@ export async function request(path, { method = 'GET', body } = {}) {
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(payload?.error || 'The server could not complete the request.');
+    const error = new Error(payload?.error || 'The server could not complete the request.');
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
